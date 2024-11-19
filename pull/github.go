@@ -70,6 +70,7 @@ func (loc Locator) IsComplete() bool {
 	case loc.Value.GetHead().GetRepo().GetID() == 0:
 	case loc.Value.GetHead().GetRepo().GetName() == "":
 	case loc.Value.GetHead().GetRepo().GetOwner().GetLogin() == "":
+	case loc.Value.GetChangedFiles() == 0:
 	default:
 		return true
 	}
@@ -108,6 +109,7 @@ func (loc Locator) toV4(ctx context.Context, client *githubv4.Client) (*v4PullRe
 	v4.BaseRefName = loc.Value.GetBase().GetRef()
 	v4.BaseRepository.DatabaseID = loc.Value.GetBase().GetRepo().GetID()
 	v4.IsDraft = loc.Value.GetDraft()
+	v4.ChangedFiles = loc.Value.GetChangedFiles()
 	return &v4, nil
 }
 
@@ -270,6 +272,11 @@ func (ghc *GitHubContext) Branches() (base string, head string) {
 }
 
 func (ghc *GitHubContext) ChangedFiles() ([]*File, error) {
+	// Check if changed files exceeds the limit
+	if ghc.pr.ChangedFiles > MaxPullRequestFiles {
+		return nil, errors.Errorf("number of changed files (%d) exceeds limit (%d)", ghc.pr.ChangedFiles, MaxPullRequestFiles)
+	}
+
 	if ghc.files == nil {
 		opt := github.ListOptions{
 			PerPage: 100,
@@ -318,9 +325,7 @@ func (ghc *GitHubContext) ChangedFiles() ([]*File, error) {
 			})
 		}
 	}
-	if len(ghc.files) >= MaxPullRequestFiles {
-		return nil, errors.Errorf("too many files in pull request, maximum is %d", MaxPullRequestFiles)
-	}
+
 	return ghc.files, nil
 }
 
@@ -1109,6 +1114,8 @@ type v4PullRequest struct {
 	BaseRepository struct {
 		DatabaseID int64
 	}
+
+	ChangedFiles int
 }
 
 type v4PageInfo struct {

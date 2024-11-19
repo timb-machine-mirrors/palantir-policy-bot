@@ -71,6 +71,27 @@ func TestChangedFiles(t *testing.T) {
 	assert.Equal(t, 2, filesRule.Count, "cached files were not used")
 }
 
+func TestChangedFilesExceedsLimit(t *testing.T) {
+	rp := &ResponsePlayer{}
+	rp.AddRule(
+		ExactPathMatcher("/repos/testorg/testrepo/pulls/123/files"),
+		"testdata/responses/pull_files.yml",
+	)
+	rp.AddRule(
+		GraphQLNodePrefixMatcher("repository.pullRequest.changedFiles"),
+		"testdata/responses/pull_changed_files_exceeds_limit.yml",
+	)
+
+	pr := defaultTestPR()
+	*pr.ChangedFiles = 3001
+
+	ctx := makeContext(t, rp, pr, nil)
+
+	_, err := ctx.ChangedFiles()
+	assert.Equal(t, 3001, pr.GetChangedFiles())
+	assert.Contains(t, err.Error(), "number of changed files (3001) exceeds limit (3000)")
+}
+
 func TestChangedFilesNoFiles(t *testing.T) {
 	rp := &ResponsePlayer{}
 	filesRule := rp.AddRule(
@@ -723,6 +744,7 @@ func defaultTestPR() *github.PullRequest {
 				Name: github.String("testrepo"),
 			},
 		},
+		ChangedFiles: github.Int(1),
 	}
 }
 
